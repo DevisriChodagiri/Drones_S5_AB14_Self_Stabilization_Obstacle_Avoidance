@@ -1,0 +1,6 @@
+pybullet
+pgmpy
+scikit-learn
+numpy
+pandas
+matplotlib
