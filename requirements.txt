@@ -1,8 +1,0 @@
-```text
-pybullet==3.2.6
-numpy
-pandas
-scikit-learn
-matplotlib
-joblib
-```
