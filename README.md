@@ -33,190 +33,240 @@
 ### Autonomous Self-Stabilizing Drone with Obstacle Avoidance
 
 ---
-
 ## ABSTRACT
 
-Autonomous drones require stability, environmental awareness, and safe decision-making to operate effectively without continuous human intervention. A drone may become unstable due to changes in its roll and pitch, while obstacles in its flight path can lead to collisions.
+This project presents an autonomous quadrotor that stabilizes itself and avoids obstacles, implemented in
+**Python and PyBullet**. The work has two main modules.
 
-This project presents an **Autonomous Self-Stabilizing Drone with Obstacle Avoidance** that combines PID-based stabilization, Machine Learning-based safety prediction, high-attitude detection, automatic recovery, obstacle detection, and obstacle avoidance.
+The first module is **self-stabilization**. The drone's roll and pitch are measured, the error is computed, and a
+mathematical **cascaded PID controller** (P, I and D terms computed and logged separately) converts the correction
+into individual motor thrusts through a motor mixer. The controller is tested with torque disturbances and with a
+circular trajectory under constant wind. A **data-driven system identification** study learns how the drone moves
+from flight data: a linear model `x(k+1) = A x(k) + B u(k)` solved with the **pseudo-inverse**, and a **nonlinear**
+model discovered by sparse regression (SINDy), both compared with the analytic Newton-Euler physics.
 
-The drone continuously monitors important flight parameters such as **roll, pitch, speed, and distance from obstacles**. A PID controller is used to reduce the error between the desired and current attitude and maintain stable flight.
+The second module is **intelligent obstacle avoidance**. The distance to an obstacle, the closing speed and the
+time-to-collision are estimated and combined with roll and pitch. A **Logistic Regression** model and a **pgmpy
+Bayesian network** predict the risk **SAFE / WARNING / DANGER**; an **expected-cost decision controller** selects
+**CONTINUE / SLOW_DOWN / AVOID**, and the avoidance logic changes the drone's velocity.
 
-A **Logistic Regression** model is used as a Machine Learning safety layer. The model uses distance, speed, roll, and pitch as input features and predicts whether the current flight condition is **SAFE or UNSAFE**.
-
-When the drone reaches an unsafe attitude condition, the high-attitude detection mechanism identifies the instability and activates a recovery controller. The recovery controller gradually reduces the attitude deviation and brings the drone back toward a stable state.
-
-An ultrasonic distance measurement is used to detect obstacles in the drone's path. When an obstacle is detected, the drone enters obstacle avoidance mode. After the obstacle is cleared, the system returns the drone to forward flight.
-
-The complete system is developed and evaluated using **Simulink** and **Python-based Machine Learning components**.
+Finally, all parts are integrated in PyBullet, including a **realistic 3-D world** with trees, buildings, a moving
+bird, and **turbulent wind with gusts**, and the complete system is evaluated quantitatively.
 
 ---
 
 ## INTRODUCTION
 
-Drones are increasingly being used in surveillance, agriculture, inspection, delivery, mapping, disaster management, and autonomous navigation.
+Drones are used in surveillance, agriculture, inspection, delivery, mapping and disaster management. To operate
+autonomously, a drone must keep its orientation stable and respond to its surroundings. A quadrotor is an unstable,
+**nonlinear** system: its thrust direction depends on sine and cosine of roll and pitch, its rotation equations
+contain products of angular rates, and aerodynamic drag grows with the square of speed. Obstacles and wind make the
+problem harder.
 
-For autonomous operation, a drone must be able to maintain its orientation while also responding to its surroundings. Two important challenges in autonomous drone operation are **flight stabilization** and **obstacle avoidance**.
+This project combines classical control (PID), data-driven modelling (system identification), and probabilistic
+machine learning (Logistic Regression, Bayesian network) into one autonomous flight framework.
 
-A drone may become unstable when its roll or pitch deviates significantly from the desired orientation. At the same time, obstacles in the flight path can cause collisions if they are not detected and avoided.
+**Major components**
 
-This project focuses on developing a drone system that combines **self-stabilization, safety prediction, instability detection, recovery, and obstacle avoidance**.
-
-The major components of the proposed system are:
-
-- **PID-based self-stabilization**
-- **Roll and pitch monitoring**
-- **Machine Learning-based safety prediction**
-- **High-attitude / instability detection**
-- **Automatic recovery controller**
-- **Obstacle detection**
-- **Obstacle avoidance**
-- **Return to forward flight**
-
-The system continuously monitors the drone's condition and responds according to the current flight situation. The objective is to make the drone more stable and capable of responding automatically to unsafe conditions and obstacles.
+* Mathematical PID self-stabilization (cascaded position/velocity, attitude, altitude, yaw loops)
+* Quadrotor physics: motor mixer, motor lag, drag, wind
+* Data-driven system identification (linear `A, B` with pseudo-inverse; nonlinear SINDy)
+* Obstacle features: distance, closing speed, time-to-collision, roll, pitch
+* ML risk prediction: Logistic Regression and pgmpy Bayesian network
+* Expected-cost decision controller and avoidance logic
+* Full PyBullet simulation and realistic world with wind
 
 ---
 
 ## METHODOLOGY
 
-The proposed system consists of multiple modules that work together to provide autonomous and safe drone operation.
+### System operation (every 1/120 s)
 
-The major stages of the methodology are:
+```
+obstacles + drone state
+        |
+        v
+ features: distance, closing speed, time-to-collision, roll, pitch
+        |
+        v
+ risk model (Logistic Regression / pgmpy Bayesian network) --> P(SAFE), P(WARNING), P(DANGER)
+        |
+        v
+ decision controller (minimum expected cost) --> CONTINUE / SLOW_DOWN / AVOID
+        |
+        v
+ avoidance logic --> velocity command
+        |
+        v
+ velocity PID --> desired roll/pitch --> attitude PID --> torques
+        |
+        v
+ motor mixer --> 4 motor thrusts --> PyBullet physics (+ wind)
+```
 
-#### Complete System Operation
+### Stages
 
-The complete system operates through the following sequence:
-
-1. **Sensor Monitoring**  
-   The drone continuously monitors roll, pitch, speed, and distance.
-
-2. **PID Stabilization**  
-   Roll and pitch deviations are corrected using the PID controller.
-
-3. **Machine Learning Safety Prediction**  
-   The Logistic Regression model classifies the current flight condition as SAFE or UNSAFE.
-
-4. **Instability Detection**  
-   If the drone reaches an unsafe attitude, the high-attitude detection mechanism is activated.
-
-5. **Recovery Control**  
-   The recovery controller reduces the attitude deviation and brings the drone toward a stable state.
-
-6. **Obstacle Detection**  
-   The distance measurement is continuously checked for obstacles.
-
-7. **Obstacle Avoidance**  
-   If an obstacle is detected, the drone enters avoidance mode.
-
-8. **Return to Forward Flight**<br>
-   After the obstacle is cleared, the drone returns to forward flight.
-
-   
-   ---
-   ---
-## 7. RESULTS
-
-The proposed **Autonomous Self-Stabilizing Drone with Obstacle Avoidance** was tested by evaluating the individual modules and their integrated behavior. The results demonstrate the performance of the machine learning safety prediction, PID-based stabilization, obstacle avoidance, and recovery control mechanisms.
-
-### 7.1 ML-Based Safe/Unsafe Prediction
-
-The Logistic Regression model was used to classify the current drone flight condition as **SAFE** or **UNSAFE**. The model takes parameters such as distance, speed, roll, and pitch as input and predicts whether the current flight condition is suitable for safe operation.
-
-The testing results demonstrate that the trained model can distinguish between safe and potentially unsafe drone states based on the given flight parameters.
-
-**Figure 1: ML-based Safe/Unsafe prediction result**
-
-<!-- Add ML result image here -->
-<img width="851" height="245" alt="ml_prediction_safe" src="https://github.com/user-attachments/assets/af836e16-d887-4fc4-9138-0c93c44bead5" />
-(<img width="482" height="222" alt="ml_prediction_unsafe" src="https://github.com/user-attachments/assets/86fb111d-3269-40b9-97a5-9ff11cdd16b9" />
-)
-
-
-### 7.2 PID Stabilization Result
-
-The PID controller was implemented to maintain the drone's desired orientation during flight. The controller continuously monitors the roll and pitch values and calculates corrective responses whenever the drone deviates from its desired orientation.
-
-The simulation results show that the controller reduces attitude deviations and brings the drone back toward a stable orientation. This demonstrates the ability of the PID controller to maintain self-stabilization during flight.
-
-**Figure 2: PID-based drone stabilization result**
-
-<!-- Add PID stabilization image here -->
-(<img width="1477" height="275" alt="PID_Stabilization_Result" src="https://github.com/user-attachments/assets/04d6818c-0f29-4528-9a78-2982bca23a5a" />)
-
-
-### 7.3 Obstacle Avoidance Result
-
-The ultrasonic sensor simulation was used to measure the distance between the drone and an obstacle. When the measured distance decreases below the defined safety threshold, the obstacle avoidance mechanism is activated.
-
-The drone changes its flight behavior to avoid the detected obstacle instead of continuing its normal forward flight. After the obstacle is sufficiently cleared, the system can return toward its normal forward-flight behavior.
-
-**Figure 3: Obstacle detection and avoidance result**
-
-<!-- Add obstacle avoidance image here -->
-(<img width="881" height="547" alt="Obstacle_Avoidance_Result" src="https://github.com/user-attachments/assets/45ac078e-22d9-44a8-b12d-51150bfcaa00" />)
-
-
-### 7.4 Recovery Control Result
-
-The recovery controller is activated when the drone experiences a large roll or pitch deviation and becomes unstable. The controller applies corrective actions to reduce the attitude error and restore the drone to a stable state.
-
-The simulation results show the roll and pitch values progressively decreasing toward the stable region during recovery. This demonstrates that the recovery controller can respond to unstable flight conditions and attempt to restore stable flight.
-
-**Figure 4: Recovery controller response**
-
-<!-- Add recovery control image here -->
-(<img width="1201" height="591" alt="Recovery_Controller_Result" src="https://github.com/user-attachments/assets/c5c8394c-2902-47ae-9170-54435acdef1a" />)
-
-
-
-
-
-### 7.5 Overall Results
-
-The experimental and simulation results demonstrate that the proposed system can:
-
-- Predict whether a flight condition is **SAFE or UNSAFE** using Logistic Regression.
-- Maintain drone orientation using **PID-based stabilization**.
-- Detect obstacles using distance measurements and initiate **obstacle avoidance**.
-- Detect significant attitude deviations and activate the **recovery controller**.
-- Integrate all the modules into an autonomous flight-control framework.
-
-Overall, the results indicate that the proposed **Autonomous Self-Stabilizing Drone with Obstacle Avoidance** provides a combined approach for improving drone stability, obstacle awareness, and flight safety.
+1. **Physics model** (`physics_model.py`): motor mixer (`T, τx, τy, τz ↔ f1..f4`), first-order motor lag, quadratic
+   drag, Newton-Euler equations; validated against PyBullet.
+2. **PID stabilization** (`self_stabilizing_pid_ml.py`): `u = Kp·e + Ki·∫e dt + Kd·de/dt` with anti-windup; the error,
+   integral, derivative and the P, I, D contributions are plotted individually. Experiments: attitude disturbance
+   and circular trajectory under wind (P, PI, PD, PID compared).
+3. **System identification (ML part)**: the drone is flown with random excitation, data `(x_k, u_k) → x_{k+1}` is
+   recorded, a linear model is fitted with the pseudo-inverse `Θ = X_next · pinv([x; u; 1])`, and a nonlinear sparse
+   model is fitted with a library of candidate functions (sin, cos, products, drag) and sequentially thresholded least
+   squares. Models are compared on unseen data.
+4. **Risk prediction** (`obstacle_avoidance_pgmpy.py`): Logistic Regression and a pgmpy Bayesian network
+   (`Distance→TTC←ClosingSpeed`, `Distance, TTC, Tilt → Risk`) with CPDs learned from data and exact inference.
+5. **Decision and avoidance**: `action* = argmin_a Σ_r P(r)·Cost[a][r]`; the action sets the velocity command
+   (go to goal, slow down, sidestep).
+6. **Integration** (`full_simulation.py`) and **realistic world with wind** (`realistic_simulation.py`).
 
 ---
-## 8. CONCLUSION
 
-The proposed **Autonomous Self-Stabilizing Drone with Obstacle Avoidance** was successfully designed and evaluated using Simulink and machine learning techniques. The system combines **PID-based attitude stabilization, ultrasonic-based obstacle detection, obstacle avoidance, recovery control, and Logistic Regression-based safety prediction** into a unified autonomous flight-control framework.
+## PROJECT STRUCTURE
 
-The PID controller helps maintain the drone's roll and pitch stability during flight, while the ultrasonic sensor enables the system to detect obstacles and initiate appropriate avoidance actions. When significant attitude deviations occur, the recovery controller is activated to bring the drone back toward a stable condition. In addition, the Logistic Regression model classifies the current flight condition as **SAFE or UNSAFE** based on important flight parameters such as distance, speed, roll, and pitch.
-
-The simulation results demonstrate that the individual modules and their integrated operation perform as expected under the tested conditions. The system is therefore capable of improving **flight stability, obstacle awareness, and autonomous safety decision-making**.
-
-Overall, this project demonstrates how **control systems, sensor-based decision-making, simulation, and machine learning** can be combined to develop a more reliable autonomous drone system. Future work can focus on real-time hardware implementation, additional sensors, more advanced machine learning models, and testing under real-world flight conditions.
+| File | Purpose |
+|---|---|
+| `obstacle_avoidance_pgmpy.py` | Complete obstacle avoidance in one file (features, Logistic Regression, pgmpy network, decision, avoidance, tests) |
+| `self_stabilizing_pid_ml.py` | Mathematical PID, experiments, data-driven system identification |
+| `physics_model.py` | Drone physics: mixer, motor lag, drag, Newton-Euler model, PyBullet drone, validation |
+| `full_simulation.py` | Full system in PyBullet: zig-zag and crossing obstacles with metrics |
+| `realistic_simulation.py` | Full system in a realistic world: trees, buildings, bird, wind |
+| `requirements.txt` | Python packages |
+| `plots/` | Generated figures |
 
 ---
-## 9. REFERENCES
 
-1. López-Sánchez, I., & Moreno-Valenzuela, J. (2023).  
-   **PID Control of Quadrotor UAVs: A Survey.**  
-   *Annual Reviews in Control, 56, 100900.*  
-   [Paper Link](https://doi.org/10.1016/j.arcontrol.2023.100900)
+## INSTALLATION AND USAGE
 
-2. Sun, X., & Yang, J. (2023).  
-   **Design of a Quadcopter Based on Ultrasonic Obstacle Avoidance.**  
-   *Journal of Hebei University of Water Resources and Electric Engineering.*  
-   [Paper Link](https://xuebao.hbwe.edu.cn/EN/10.16046/j.cnki.issn2096-5680.2023.03.002)
+```bash
+pip install numpy pandas matplotlib scikit-learn pgmpy pybullet
+```
 
-3. Lotufo, M. A., Colangelo, L., Perez-Montenegro, C. N., Canuto, E., & Novara, C. (2019).  
-   **UAV Quadrotor Attitude Control: An ADRC-EMC Combined Approach.**  
-   *Control Engineering Practice, 84, 13–22.*  
-   [Paper Link](https://doi.org/10.1016/j.conengprac.2018.11.002)
+```bash
+python physics_model.py              # physics validation + open-loop test
+python self_stabilizing_pid_ml.py    # PID experiments + system identification
+python obstacle_avoidance_pgmpy.py   # risk models, zig-zag, obstacle speed sweep
+python full_simulation.py            # 3-D PyBullet window (zig-zag, crossing obstacle)
+python realistic_simulation.py       # 3-D PyBullet window (trees, buildings, wind)
+```
 
-4. López-Sánchez, I., & Moreno-Valenzuela, J. (2019).  
-   **Position and Attitude Control of Multi-Rotor Aerial Vehicles: A Survey.**  
-   *Annual Reviews in Control.*  
-   [Paper Link](https://doi.org/10.1016/j.arcontrol.2019.03.001)
+Options: `--headless` (no 3-D window), `--no-show` (only save plots), `--wind-speed 6`, `--wind-dir 0`,
+`--model lr|bn`, `--speed 3`, `--eval`, `--snapshot`, `--opengl2` (if the 3-D window is blank).
+All figures are saved in `plots/`.
 
-5. **Design of Rules for In-Flight Non-Parametric Tuning of PID Controllers for Unmanned Aerial Vehicles.** (2019).  
-   *Journal of the Franklin Institute.*  
-   [Paper Link](https://doi.org/10.1016/j.jfranklin.2018.10.015)
+---
+
+## RESULTS
+
+The implemented components were tested separately and then together. Numbers below come from our runs and will vary
+slightly with random seeds.
+
+### 1. Physics validation
+PyBullet and the analytic Newton-Euler model agree closely (RMSE about 1e-3 or less per state over 0.4 s). An
+open-loop test with constant hover thrust shows that a small torque kick is never corrected, which shows why
+feedback control is needed.
+
+### 2. PID stabilization and trajectory tracking
+* **Attitude disturbance:** roll and pitch torque kicks are rejected; the plots show `e`, `∫e`, `de/dt`, `P`, `I`, `D`
+  individually.
+* **Circular trajectory with constant wind (0.6 N from t = 6 s):** P-only and PI become unstable (no damping); PD is
+  stable but keeps a steady offset; PID gives the smallest error.
+
+| Position loop | RMSE (m) | Final error (m) |
+|---|---|---|
+| P | 2.05 | 2.82 |
+| PI | 3.96 | 5.16 |
+| PD | 0.36 | 0.46 |
+| **PID** | **0.18** | **0.14** |
+
+### 3. Data-driven system identification
+0.5 s open-loop prediction error on unseen flight data:
+
+| Model | roll φ (rad) | pitch θ (rad) | vx (m/s) |
+|---|---|---|---|
+| Linear (`A, B`, pseudo-inverse) | 0.0191 | 0.0175 | 0.1515 |
+| **Nonlinear (SINDy)** | **0.0010** | **0.0005** | **0.0184** |
+| Analytic physics | 0.0097 | 0.0102 | 0.0653 |
+
+The linear model is accurate near hover but fails at larger angles; the nonlinear sparse model is about 10 times more
+accurate and recovers terms such as `τx/Ixx`, trigonometric thrust terms and drag.
+
+### 4. Risk classification (held-out data)
+
+| Model | Accuracy |
+|---|---|
+| Logistic Regression | 0.87 |
+| pgmpy Bayesian network | 0.78 |
+
+The Bayesian network is less accurate because it uses discretised features, but it gives interpretable probabilities.
+
+### 5. Obstacle avoidance against obstacle speed (30 random crossing scenarios per speed)
+
+| Obstacle speed (m/s) | Collision rate, no avoidance | Collision rate, with avoidance |
+|---|---|---|
+| 0.5 | 100 % | 0 % |
+| 1.0 | 70 % | 7 % |
+| 2.0 | 67 % | 0 % |
+| 3.0 | 53 % | 3 % |
+| 4.0 | 53 % | 13 % |
+
+Without avoidance, the rate falls with speed partly because fast obstacles often cross before the drone arrives.
+
+### 6. Full system in PyBullet
+Zig-zag between three obstacles with no collision. In crossing-obstacle tests the altitude error stayed at or below
+0.01 m during avoidance. (Small sample: 6 scenarios per speed; at 1 m/s two of six runs still collided.)
+
+### 7. Realistic world with wind
+Trees, buildings, a shed, a patrolling bird and wind (mean + turbulence + gusts). With avoidance the drone reached the
+goal without collision at wind speeds of 0, 2 and 4 m/s (3 runs each) and held its altitude within about 0.03 m; at
+6 m/s collisions occurred, and without avoidance every run collided.
+
+---
+
+## WHAT IS IMPLEMENTED, TESTED AND STILL LIMITED
+
+**Implemented:** PID with separate P, I, D terms, motor mixer and physics, linear and nonlinear system identification,
+Logistic Regression and Bayesian-network risk models, expected-cost decision, avoidance logic, full PyBullet
+integration, realistic world with wind.
+
+**Tested:** physics against analytic model; disturbance rejection; P/PI/PD/PID comparison; identification on unseen
+data; classifier accuracy; obstacles at increasing speeds; wind sweep.
+
+**Limitations and next steps**
+
+* Risk labels come from a rule-based generator with noise, not from real flight data.
+* The Bayesian network is less accurate than Logistic Regression (discretised features).
+* The avoidance planner is reactive (no global planning); very fast obstacles and strong wind can still cause collisions.
+* Obstacles are 2-D circles at a fixed altitude; PyBullet test sample sizes are small.
+* The identified model is not yet used inside the controller (for example model-predictive control).
+
+---
+
+## CONCLUSION
+
+The project combines a mathematically defined PID stabilizer, data-driven nonlinear system identification and a
+probabilistic obstacle-avoidance pipeline in one PyBullet simulation. Experiments show that PID with all three terms
+rejects disturbances best, that a nonlinear identified model predicts the drone's motion far better than a linear one,
+and that the avoidance pipeline greatly reduces collisions in the tested scenarios. Future work will use the
+identified model inside the controller, test with larger and more varied obstacle scenarios, add global path planning,
+learn risk from real data, and move toward hardware implementation.
+
+---
+
+## REFERENCES
+
+1. López-Sánchez, I., & Moreno-Valenzuela, J. (2023). PID Control of Quadrotor UAVs: A Survey. *Annual Reviews in Control*, 56, 100900.
+2. Sun, X., & Yang, J. (2023). Design of a Quadcopter Based on Ultrasonic Obstacle Avoidance. *Journal of Hebei University of Water Resources and Electric Engineering*.
+3. Lotufo, M. A., Colangelo, L., Perez-Montenegro, C. N., Canuto, E., & Novara, C. (2019). UAV Quadrotor Attitude Control: An ADRC-EMC Combined Approach. *Control Engineering Practice*, 84, 13–22.
+4. López-Sánchez, I., & Moreno-Valenzuela, J. (2019). Position and Attitude Control of Multi-Rotor Aerial Vehicles: A Survey. *Annual Reviews in Control*.
+5. Design of Rules for In-Flight Non-Parametric Tuning of PID Controllers for Unmanned Aerial Vehicles. (2019). *Journal of the Franklin Institute*.
+6. Brunton, S. L., Proctor, J. L., & Kutz, J. N. (2016). Discovering governing equations from data by sparse identification of nonlinear dynamical systems. *PNAS*, 113(15), 3932–3937.
+7. Ankan, A., & Panda, A. (2015). pgmpy: Probabilistic Graphical Models using Python. *Proceedings of the 14th Python in Science Conference*.
+8. Coumans, E., & Bai, Y. PyBullet, a Python module for physics simulation for games, robotics and machine learning.
+
+---
+
+## LICENSE
+
+This project is licensed under the MIT License.
